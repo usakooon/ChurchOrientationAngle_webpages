@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Church Orientation Explorer (Pages)</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+  <!-- Turf.js (地理計算) -->
+  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-container">
+    <div class="controls">
+      <form id="search-form">
+        <input id="city" placeholder="都市名（例: Milan, Rome, Tokyo）" />
+        <button id="btn-city" type="submit">都市検索</button>
+        <button id="btn-view" type="button">現在の表示範囲で検索</button>
+      </form>
+
+      <div class="export-row">
+        <button id="btn-csv" type="button">CSVエクスポート</button>
+        <button id="btn-geo" type="button">GeoJSONエクスポート</button>
+        <input id="file-import" type="file" accept=".geojson,application/geo+json" />
+        <small>← GeoJSONインポート</small>
+      </div>
+
+      <div id="status"></div>
+    </div>
+
+    <div class="main">
+      <div id="map"></div>
+
+      <div class="table-panel">
+        <h3>教会の向き一覧</h3>
+        <table id="results-table">
+          <thead>
+            <tr>
+              <th>名称</th><th>緯度</th><th>経度</th><th>方位角(°)</th><th>東西偏差(°)</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="./main.js"></script>
+</body>
+</html>
