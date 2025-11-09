@@ -1,12 +1,34 @@
-/* docs/styles.css */
-html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto}
-.app{display:flex;flex-direction:column;height:100%}
-.toolbar{display:flex;gap:.5rem;align-items:center;padding:.5rem;border-bottom:1px solid #ddd}
-.toolbar input[type="text"], #city{padding:.4rem .6rem}
-.chk{margin-left:auto}
-.content{flex:1;display:flex;min-height:0}
-#map{flex:1}
-.table{width:420px;overflow:auto;border-left:1px solid #ddd}
-.table table{width:100%;border-collapse:collapse;font-size:.9rem}
-.table th,.table td{border-bottom:1px solid #eee;padding:.3rem .4rem;white-space:nowrap}
-#status{margin-left:.5rem;color:#666}
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif;
+}
+
+.app-container {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  height: 100%;
+}
+
+.left { display: flex; flex-direction: column; min-width: 320px; }
+.right { border-left: 1px solid #e5e5e5; padding: 12px; overflow: auto; }
+
+#map { flex: 1; min-height: 420px; }
+
+.toolbar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; flex-wrap: wrap; }
+.status { color: #666; }
+.file input { display: none; }
+.file span { border: 1px solid #ccc; padding: 6px 10px; cursor: pointer; background: #fafafa; }
+.hint { color: #777; font-size: 12px; }
+
+.table-wrap { overflow: auto; max-height: calc(100vh - 140px); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { padding: 6px 8px; border-bottom: 1px solid #eee; text-align: left; }
+tbody tr:hover { background: #f9f9f9; }
+
+.leaflet-tooltip.mylabel {
+  background: rgba(255,255,255,0.85);
+  border: 1px solid #999;
+  color: #111;
+  padding: 2px 4px;
+}
