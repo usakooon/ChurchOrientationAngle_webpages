@@ -1,51 +1,57 @@
+<!-- docs/index.html -->
 <!doctype html>
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Church Orientation Explorer (Pages)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Church Orientation Explorer</title>
 
   <!-- Leaflet -->
-  <link rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- Turf.js (地理計算) -->
+  <!-- Turf.js（幾何計算） -->
   <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+
+  <!-- OSM → GeoJSON 変換（relations対応） -->
+  <script src="https://unpkg.com/osmtogeojson@3.0.0/osmtogeojson.min.js"></script>
 
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div class="app-container">
-    <div class="controls">
-      <form id="search-form">
-        <input id="city" placeholder="都市名（例: Milan, Rome, Tokyo）" />
-        <button id="btn-city" type="submit">都市検索</button>
-        <button id="btn-view" type="button">現在の表示範囲で検索</button>
-      </form>
+  <div class="app">
+    <div class="toolbar">
+      <input id="city" placeholder="都市名（例: Milano, Rome, Tokyo）" />
+      <button id="btn-city">都市検索</button>
+      <button id="btn-bbox">現在の表示範囲で検索</button>
 
-      <div class="export-row">
-        <button id="btn-csv" type="button">CSVエクスポート</button>
-        <button id="btn-geo" type="button">GeoJSONエクスポート</button>
-        <input id="file-import" type="file" accept=".geojson,application/geo+json" />
-        <small>← GeoJSONインポート</small>
-      </div>
+      <label class="chk">
+        <input type="checkbox" id="chk-entrance" />
+        道路向き＝入口／反対＝祭壇で矢印
+      </label>
 
-      <div id="status"></div>
+      <button id="btn-csv">CSVエクスポート</button>
+      <button id="btn-geojson">GeoJSONエクスポート</button>
+
+      <label class="file">
+        <input type="file" id="file" accept=".geojson,.json" />
+        GeoJSONインポート
+      </label>
+      <span id="status"></span>
     </div>
 
-    <div class="main">
+    <div class="content">
       <div id="map"></div>
-
-      <div class="table-panel">
+      <div class="table">
         <h3>教会の向き一覧</h3>
-        <table id="results-table">
+        <table>
           <thead>
             <tr>
-              <th>名称</th><th>緯度</th><th>経度</th><th>方位角(°)</th><th>東西偏差(°)</th>
+              <th>名称</th><th>緯度</th><th>経度</th>
+              <th>方位角（°）</th><th>東西偏差（°）</th>
             </tr>
           </thead>
-          <tbody id="tbody"></tbody>
+          <tbody id="rows"></tbody>
         </table>
       </div>
     </div>

@@ -1,17 +1,12 @@
-html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
-.app-container{display:flex;flex-direction:column;height:100%;}
-.controls{padding:8px 12px;border-bottom:1px solid #ddd;background:#fafafa;}
-.controls form{display:flex;gap:8px;flex-wrap:wrap;}
-.controls input{padding:6px 8px;width:260px;max-width:60vw;}
-.controls button{padding:6px 10px;cursor:pointer}
-.export-row{margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
-#status{margin-top:6px;font-size:12px}
-#status.ok{color:#0b7}
-#status.err{color:#d33}
-
-.main{display:grid;grid-template-columns:1fr 420px;gap:12px;padding:12px;flex:1;min-height:0}
-#map{height:100%;min-height:480px;border:1px solid #ddd;border-radius:6px}
-.table-panel{min-width:320px;overflow:auto}
-#results-table{width:100%;border-collapse:collapse;font-size:13px}
-#results-table th,#results-table td{border:1px solid #ddd;padding:6px;text-align:left}
-#results-table thead{background:#f3f3f3}
+/* docs/styles.css */
+html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto}
+.app{display:flex;flex-direction:column;height:100%}
+.toolbar{display:flex;gap:.5rem;align-items:center;padding:.5rem;border-bottom:1px solid #ddd}
+.toolbar input[type="text"], #city{padding:.4rem .6rem}
+.chk{margin-left:auto}
+.content{flex:1;display:flex;min-height:0}
+#map{flex:1}
+.table{width:420px;overflow:auto;border-left:1px solid #ddd}
+.table table{width:100%;border-collapse:collapse;font-size:.9rem}
+.table th,.table td{border-bottom:1px solid #eee;padding:.3rem .4rem;white-space:nowrap}
+#status{margin-left:.5rem;color:#666}
