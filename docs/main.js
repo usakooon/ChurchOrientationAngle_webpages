@@ -1,7 +1,10 @@
 /* ========= 設定 ========= */
 const NOMINATIM = "https://nominatim.openstreetmap.org/search";
-const OVERPASS = "https://overpass-api.de/api/interpreter"; // CORS可の公式
+const OVERPASS = "https://overpass-api.de/api/interpreter";
 // 必要に応じてミラー: https://overpass.kumi.systems/api/interpreter
+
+// 先頭の定数定義（NOMINATIM, OVERPASS など）はそのまま残す
+document.addEventListener('DOMContentLoaded', () => {
 
 /* ========= DOM ========= */
 const mapDiv = document.getElementById("map");
@@ -375,4 +378,6 @@ btnExportGeojson.addEventListener("click", exportGeoJSON);
 fileImport.addEventListener("change", (e) => { const f = e.target.files?.[0]; if (f) importGeoJSON(f); });
 
 /* 初期 */
-setStatus("準備OK。都市名を入れるか、地図を移動して『現在の表示範囲で検索』を押してください。");
+setStatus("都市名を入れるか、地図を移動して『現在の表示範囲で検索』を押してください。");
+
+}); // DOMContentLoaded end
