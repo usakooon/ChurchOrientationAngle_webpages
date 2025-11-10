@@ -175,53 +175,83 @@ async function fetchOverpass(bboxSWNE) {
   return osmtogeojson(json); // 下で定義
 }
 
-/* ========= OSM JSON → GeoJSON（最小限）========= */
-/* 軽量版。必要十分の変換だけ実装（way/relation面）。*/
+// ========= OSM JSON → GeoJSON（修正版） =========
+// Overpassの出力（node / way / relation）を安全にGeoJSON化します
 function osmtogeojson(osm) {
-  const nodes = new Map();
-  (osm.elements||[]).forEach(el => {
-    if (el.type === "node") nodes.set(el.id, [el.lon, el.lat]);
-  });
+  const elements = Array.isArray(osm.elements) ? osm.elements : [];
 
-  function wayToCoords(way) {
-    return way.nodes.map(id => nodes.get(id)).filter(Boolean);
+  // --- node一覧をマップに登録 ---
+  const nodes = new Map();
+  for (const el of elements) {
+    if (el.type === "node") nodes.set(el.id, [el.lon, el.lat]);
   }
 
+  // --- way一覧をマップに登録 ---
+  const ways = new Map();
+  const wayTags = new Map();
+  for (const el of elements) {
+    if (el.type === "way") {
+      const coords = (el.nodes || []).map(id => nodes.get(id)).filter(Boolean);
+      ways.set(el.id, coords);
+      wayTags.set(el.id, el.tags || {});
+    }
+  }
+
+  // --- ヘルパー関数 ---
+  const isClosed = (ring) => {
+    if (!ring || ring.length < 4) return false;
+    const a = ring[0], b = ring[ring.length - 1];
+    return a && b && a[0] === b[0] && a[1] === b[1];
+  };
+
+  const isChurch = (tags) =>
+    tags && typeof tags.building === "string" &&
+    /^(church|cathedral)$/i.test(tags.building);
+
   const features = [];
-  (osm.elements||[]).forEach(el => {
-    if ((el.type === "way" && el.tags && el.tags.building && el.nodes?.length >= 4)) {
-      const ring = wayToCoords(el);
-      if (ring.length >= 4 && ring[0][0] === ring[ring.length-1][0] && ring[0][1] === ring[ring.length-1][1]) {
-        features.push({
-          type: "Feature",
-          properties: el.tags,
-          geometry: { type: "Polygon", coordinates: [ring] }
-        });
-      }
-    } else if (el.type === "relation" && el.tags && el.tags.type === "multipolygon" && el.tags.building) {
-      const outer = [];
-      const inner = [];
-      (el.members||[]).forEach(m => {
-        if (m.type === "way") {
-          const ring = wayToCoords(m);
-          if (ring.length >= 4 && ring[0][0] === ring[ring.length-1][0] && ring[0][1] === ring[ring.length-1][1]) {
-            if (m.role === "outer") outer.push(ring);
-            else if (m.role === "inner") inner.push(ring);
-          }
+
+  // --- 1) 単独のwayをPolygonに変換 ---
+  for (const [id, ring] of ways) {
+    const tags = wayTags.get(id) || {};
+    if (!isChurch(tags)) continue;
+    if (isClosed(ring)) {
+      features.push({
+        type: "Feature",
+        properties: tags,
+        geometry: { type: "Polygon", coordinates: [ring] }
+      });
+    }
+  }
+
+  // --- 2) relation(multipolygon)をMultiPolygonに変換 ---
+  for (const el of elements) {
+    if (el.type !== "relation") continue;
+    const tags = el.tags || {};
+    if (tags.type !== "multipolygon" || !isChurch(tags)) continue;
+
+    const outers = [];
+    for (const m of (el.members || [])) {
+      if (m.type !== "way") continue;
+      const ring = ways.get(m.ref); // refでwayを探す
+      if (m.role === "outer" && isClosed(ring)) outers.push(ring);
+    }
+
+    if (outers.length) {
+      features.push({
+        type: "Feature",
+        properties: tags,
+        geometry: {
+          type: "MultiPolygon",
+          coordinates: outers.map(o => [o]) // innerは無視
         }
       });
-      if (outer.length) {
-        features.push({
-          type: "Feature",
-          properties: el.tags,
-          geometry: { type: "MultiPolygon", coordinates: outer.map(o => [o]) } // innerは簡略化
-        });
-      }
     }
-  });
+  }
 
+  // --- 出力 ---
   return { type: "FeatureCollection", features };
 }
+
 
 /* ========= 計算・描画 ========= */
 function computeOrientationFeatures(fc) {
