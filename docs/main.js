@@ -16,6 +16,7 @@ const tableBody = document.getElementById("table-body");
 const btnExportCsv = document.getElementById("btn-export-csv");
 const btnExportGeojson = document.getElementById("btn-export-geojson");
 const fileImport = document.getElementById("file-import");
+const modeSelect = document.getElementById("mode");
 
 /* ========= Leaflet ========= */
 const map = L.map(mapDiv, { zoomControl: true }).setView([45.4642, 9.19], 13);
@@ -28,6 +29,8 @@ const arrowLayer = L.layerGroup().addTo(map);
 const pointLayer = L.layerGroup().addTo(map);
 
 let lastFeatures = []; // 計算済みのFeatureCollectionのfeatures配列
+let selectedId = null;
+let layerIndex = new Map(); // id -> { poly, pt, arrow, rowEl }
 
 /* ========= ユーティリティ ========= */
 // 文字列名をいい感じに（OSMタグ name / church, etc.）
@@ -131,6 +134,21 @@ function downloadBlob(data, filename, mime) {
   a.remove(); URL.revokeObjectURL(url);
 }
 
+// 2点間の方位角（北=0°, 東=90°）
+function bearingDeg(lon1, lat1, lon2, lat2) {
+  const toRad = (d) => d * Math.PI / 180;
+  const toDeg = (r) => r * 180 / Math.PI;
+
+  const φ1 = toRad(lat1), φ2 = toRad(lat2);
+  const Δλ = toRad(lon2 - lon1);
+
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  let θ = toDeg(Math.atan2(y, x)); // -180..180 (北基準)
+  θ = (θ + 360) % 360;
+  return θ;
+}
+  
 /* ========= データ取得 ========= */
 async function geocodeCity(q) {
   setStatus(`Nominatim検索中: ${q}…`);
@@ -255,26 +273,78 @@ function osmtogeojson(osm) {
 
 /* ========= 計算・描画 ========= */
 function computeOrientationFeatures(fc) {
-  // fc: FeatureCollection(Polygon/MultiPolygon)
+  const mode = modeSelect?.value || "altar";
   const rows = [];
+
   fc.features.forEach(f => {
-    const name = guessName(f.properties||{});
-    const coords = collectCoords(f.geometry);
-    if (coords.length < 4) return;
-    const theta = pcaOrientationDeg(coords); // 0..360
-    const dev = eastWestDeviationDeg(theta);
+    const props = f.properties || {};
+    const name = guessName(props);
+
+    // 中心
     const center = safeCentroid(f); // [lon,lat]
+    const lonC = center[0], latC = center[1];
+
+    // PCA
+    const coords = collectCoords(f.geometry);
+    const pcaDeg = (coords.length >= 4) ? pcaOrientationDeg(coords) : 0;
+
+    // 入口（もしあれば）
+    const hasEntrance = Number.isFinite(+props.entrance_lon) && Number.isFinite(+props.entrance_lat);
+    const entranceDeg = hasEntrance
+      ? bearingDeg(lonC, latC, +props.entrance_lon, +props.entrance_lat)
+      : null;
+
+    // 祭壇（入口の反対）
+    const altarDeg = (entranceDeg != null) ? (entranceDeg + 180) % 360 : null;
+
+    // 採用する方位
+    let theta;
+    if (mode === "entrance" && entranceDeg != null) theta = entranceDeg;
+    else if (mode === "altar" && altarDeg != null) theta = altarDeg;
+    else theta = pcaDeg;
+
+    const dev = eastWestDeviationDeg(theta);
+
     rows.push({
+      id: props["@id"] || props.osm_id || `${name}-${lonC.toFixed(6)}-${latC.toFixed(6)}`,
       name,
-      lat: center[1],
-      lon: center[0],
+      lat: latC,
+      lon: lonC,
       orientation_deg: theta,
       deviation_deg: dev,
+      entrance_deg: entranceDeg,
+      altar_deg: altarDeg,
+      pca_deg: pcaDeg,
       geometry: f.geometry,
       raw: f
     });
   });
+
   return rows;
+}
+
+function selectFeatureById(id) {
+  selectedId = id;
+
+  // 表の選択表示
+  for (const [_, obj] of layerIndex) {
+    if (obj.rowEl) obj.rowEl.classList.toggle("selected", obj.id === id);
+  }
+
+  // ポリゴン強調（該当だけスタイル変更）
+  for (const [_, obj] of layerIndex) {
+    if (obj.poly) {
+      obj.poly.setStyle(obj.id === id
+        ? { color: "#0066ff", weight: 3, fillOpacity: 0.25 }
+        : { color: "#cc3333", weight: 1, fillOpacity: 0.2 }
+      );
+      if (obj.id === id) obj.poly.bringToFront();
+    }
+  }
+
+  // ズーム＆ポップアップ/ツールチップ（任意）
+  const hit = layerIndex.get(id);
+  if (hit?.poly) map.fitBounds(hit.poly.getBounds(), { padding: [30, 30] });
 }
 
 function renderAll(rows) {
@@ -283,40 +353,62 @@ function renderAll(rows) {
   arrowLayer.clearLayers();
   pointLayer.clearLayers();
   tableBody.innerHTML = "";
+  layerIndex = new Map();
 
-  // GeoJSONポリゴン
-  const gjson = {
-    type: "FeatureCollection",
-    features: rows.map(r => ({
-      type: "Feature",
-      properties: {name: r.name, orientation_deg: r.orientation_deg, deviation_deg: r.deviation_deg},
-      geometry: r.geometry
-    }))
-  };
-  polyLayer.addData(gjson);
-
-  // 矢印＆中心
-  rows.forEach(r => {
-    const line = makeArrowLine([r.lon, r.lat], r.orientation_deg, 70);
-    L.polyline(line, {color:"#d22", weight:2}).addTo(arrowLayer);
-    L.circleMarker([r.lat, r.lon], {radius:3, color:"#204", fillColor:"#fff", fillOpacity:1})
-      .bindTooltip(`${r.name}`, {direction:"top", className:"mylabel"}).addTo(pointLayer);
-  });
-
-  // テーブル
   const frag = document.createDocumentFragment();
+
   rows.forEach(r => {
+    // --- Polygon（1件ずつ追加して参照を保持）---
+    const poly = L.geoJSON({
+      type: "Feature",
+      properties: { id: r.id, name: r.name },
+      geometry: r.geometry
+    }, {
+      style: { color: "#cc3333", weight: 1, fillOpacity: 0.2 }
+    }).addTo(polyLayer);
+
+    poly.on("click", () => selectFeatureById(r.id));
+
+    // --- Arrow ---
+    const line = makeArrowLine([r.lon, r.lat], r.orientation_deg, 70);
+    const arrow = L.polyline(line, { color:"#d22", weight:2 }).addTo(arrowLayer);
+    arrow.on("click", () => selectFeatureById(r.id));
+
+    // --- Point + hover tooltip ---
+    const label = [
+      `<b>${r.name}</b>`,
+      `θ: ${r.orientation_deg.toFixed(1)}°`,
+      `dev: ${r.deviation_deg.toFixed(1)}°`
+    ].join("<br/>");
+
+    const pt = L.circleMarker([r.lat, r.lon], {
+      radius: 4,
+      color: "#204",
+      fillColor: "#fff",
+      fillOpacity: 1
+    })
+    .bindTooltip(label, { direction: "top", className: "mylabel", sticky: true })
+    .addTo(pointLayer);
+
+    pt.on("click", () => selectFeatureById(r.id));
+
+    // --- Table row ---
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${r.name}</td>
       <td>${r.lat.toFixed(6)}</td>
       <td>${r.lon.toFixed(6)}</td>
       <td>${r.orientation_deg.toFixed(1)}</td>
-      <td>${r.deviation_deg.toFixed(1)}</td>`;
+      <td>${r.deviation_deg.toFixed(1)}</td>
+    `;
+    tr.addEventListener("click", () => selectFeatureById(r.id));
     frag.appendChild(tr);
-  });
-  tableBody.appendChild(frag);
 
+    // --- 参照を保存（選択時に使う）---
+    layerIndex.set(r.id, { id: r.id, poly, pt, arrow, rowEl: tr });
+  });
+
+  tableBody.appendChild(frag);
   lastFeatures = rows;
 }
 
@@ -411,3 +503,8 @@ fileImport.addEventListener("change", (e) => { const f = e.target.files?.[0]; if
 setStatus("都市名を入れるか、地図を移動して『現在の表示範囲で検索』を押してください。");
 
 }); // DOMContentLoaded end
+
+modeSelect.addEventListener("change", () => {
+  runOverpassForCurrentView(); // 表・矢印・ツールチップが新しいmodeで描画される
+});
+
