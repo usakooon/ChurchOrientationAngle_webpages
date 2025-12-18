@@ -27,6 +27,8 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 const polyLayer = L.geoJSON([], { style: { color: "#cc3333", weight: 1, fillOpacity: 0.2 }}).addTo(map);
 const arrowLayer = L.layerGroup().addTo(map);
 const pointLayer = L.layerGroup().addTo(map);
+const entranceLayer = L.layerGroup().addTo(map);
+
 
 let lastFeatures = []; // 計算済みのFeatureCollectionのfeatures配列
 let selectedId = null;
@@ -352,6 +354,7 @@ function renderAll(rows) {
   polyLayer.clearLayers();
   arrowLayer.clearLayers();
   pointLayer.clearLayers();
+  entranceLayer.clearLayers();
   tableBody.innerHTML = "";
   layerIndex = new Map();
 
@@ -387,10 +390,25 @@ function renderAll(rows) {
       fillColor: "#fff",
       fillOpacity: 1
     })
+
     .bindTooltip(label, { direction: "top", className: "mylabel", sticky: true })
     .addTo(pointLayer);
 
     pt.on("click", () => selectFeatureById(r.id));
+
+    if (r.entrance_deg != null && Number.isFinite(r.raw?.properties?.entrance_lat) && Number.isFinite(r.raw?.properties?.entrance_lon)) {
+    const elat = +r.raw.properties.entrance_lat;
+    const elon = +r.raw.properties.entrance_lon;
+  
+    L.circleMarker([elat, elon], {
+      radius: 4,
+      color: "#00a000",
+      fillColor: "#00ff00",
+      fillOpacity: 0.9
+    })
+    .bindTooltip(`<b>Entrance</b><br/>${r.name}<br/>${r.entrance_deg.toFixed(1)}°`, {sticky:true})
+    .addTo(entranceLayer);
+   }
 
     // --- Table row ---
     const tr = document.createElement("tr");
@@ -411,6 +429,8 @@ function renderAll(rows) {
   tableBody.appendChild(frag);
   lastFeatures = rows;
 }
+
+
 
 function setStatus(msg, cls="") { statusEl.textContent = msg; statusEl.className = `status ${cls}`; }
 
