@@ -39,3 +39,4 @@ modeSelect.addEventListener("change", () => {
   runOverpassForCurrentView();
 });
 
+#rose { width: 100%; max-width: 380px; border: 1px solid #eee; border-radius: 8px; }
