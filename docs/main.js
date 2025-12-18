@@ -349,6 +349,80 @@ function selectFeatureById(id) {
   if (hit?.poly) map.fitBounds(hit.poly.getBounds(), { padding: [30, 30] });
 }
 
+  
+const roseCanvas = document.getElementById("rose");
+const roseCaption = document.getElementById("rose-caption");
+
+function drawRose(rows, binDeg = 10) {
+  if (!roseCanvas) return;
+  const ctx = roseCanvas.getContext("2d");
+  const W = roseCanvas.width, H = roseCanvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  // データ（表示している方位角を使う）
+  const angles = rows.map(r => r.orientation_deg).filter(v => Number.isFinite(v));
+  if (!angles.length) {
+    if (roseCaption) roseCaption.textContent = "データなし";
+    return;
+  }
+
+  const bins = Math.round(360 / binDeg);
+  const counts = Array(bins).fill(0);
+  for (const a of angles) {
+    const idx = Math.floor(((a % 360) + 360) % 360 / binDeg);
+    counts[idx] += 1;
+  }
+
+  const maxC = Math.max(...counts, 1);
+  const cx = W/2, cy = H/2;
+  const R = Math.min(W,H) * 0.42;
+
+  // 補助円
+  ctx.strokeStyle = "#ccc";
+  ctx.lineWidth = 1;
+  for (let k=1;k<=3;k++){
+    ctx.beginPath();
+    ctx.arc(cx,cy,R*k/3,0,Math.PI*2);
+    ctx.stroke();
+  }
+
+  // N/E/S/W ラベル
+  ctx.fillStyle = "#333";
+  ctx.font = "14px system-ui";
+  ctx.fillText("N", cx-5, cy-R-10);
+  ctx.fillText("E", cx+R+6, cy+5);
+  ctx.fillText("S", cx-5, cy+R+18);
+  ctx.fillText("W", cx-R-18, cy+5);
+
+  // 棒（扇形）
+  for (let i=0;i<bins;i++){
+    const a0 = (i*binDeg) * Math.PI/180;
+    const a1 = ((i+1)*binDeg) * Math.PI/180;
+
+    // 角度は「北=0」をCanvasに合わせる：Canvasは右(E)=0なので -90°回す
+    const rot = -Math.PI/2;
+    const start = a0 + rot;
+    const end = a1 + rot;
+
+    const len = (counts[i]/maxC) * R;
+
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,len,start,end);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(200,50,50,0.55)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(120,30,30,0.6)";
+    ctx.stroke();
+  }
+
+  if (roseCaption) {
+    const mode = modeSelect?.value || "";
+    roseCaption.textContent = `bin=${binDeg}° / n=${angles.length} / mode=${mode}`;
+  }
+}
+
+  
 function renderAll(rows) {
   // レイヤ初期化
   polyLayer.clearLayers();
@@ -396,19 +470,22 @@ function renderAll(rows) {
 
     pt.on("click", () => selectFeatureById(r.id));
 
-    if (r.entrance_deg != null && Number.isFinite(r.raw?.properties?.entrance_lat) && Number.isFinite(r.raw?.properties?.entrance_lon)) {
-    const elat = +r.raw.properties.entrance_lat;
-    const elon = +r.raw.properties.entrance_lon;
-  
-    L.circleMarker([elat, elon], {
-      radius: 4,
-      color: "#00a000",
-      fillColor: "#00ff00",
-      fillOpacity: 0.9
-    })
-    .bindTooltip(`<b>Entrance</b><br/>${r.name}<br/>${r.entrance_deg.toFixed(1)}°`, {sticky:true})
-    .addTo(entranceLayer);
-   }
+   const props = r.raw?.properties || {};
+if (Number.isFinite(+props.entrance_lat) && Number.isFinite(+props.entrance_lon)) {
+  const elat = +props.entrance_lat;
+  const elon = +props.entrance_lon;
+
+  const ept = L.circleMarker([elat, elon], {
+    radius: 4,
+    color: "#00a000",
+    fillColor: "#00ff00",
+    fillOpacity: 0.9
+  })
+  .bindTooltip(`<b>Entrance</b><br/>${r.name}`, { sticky:true })
+  .addTo(entranceLayer);
+
+  ept.on("click", () => selectFeatureById(r.id));
+}
 
     // --- Table row ---
     const tr = document.createElement("tr");
@@ -428,6 +505,8 @@ function renderAll(rows) {
 
   tableBody.appendChild(frag);
   lastFeatures = rows;
+  drawRose(rows, 10);
+
 }
 
 
