@@ -696,7 +696,4 @@ setStatus("都市名を入れるか、地図を移動して『現在の表示範
 
 }); // DOMContentLoaded end
 
-modeSelect.addEventListener("change", () => {
-  runOverpassForCurrentView(); // 表・矢印・ツールチップが新しいmodeで描画される
-});
 
