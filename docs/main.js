@@ -309,7 +309,6 @@ function osmtogeojson(osm) {
 
 /* ========= 計算・描画 ========= */
 function computeOrientationFeatures(buildingsFC, entrancesFC) {
-  const mode = modeSelect?.value || "altar";
   const rows = [];
 
   const entrancePts = entrancesFC?.features || []; // Point features (entrance nodes)
