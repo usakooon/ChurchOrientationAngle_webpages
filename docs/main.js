@@ -168,13 +168,15 @@ async function geocodeCity(q) {
   return { lat, lon, bbox: [parseFloat(item.boundingbox[2]), parseFloat(item.boundingbox[0]), parseFloat(item.boundingbox[3]), parseFloat(item.boundingbox[1])] };
 }
 
-function overpassQueryForBBox(bbox /* [s, w, n, e] ではなく Overpassは南,西,北,東 */) {
+function overpassQueryForBBox(bbox) {
   const [south, west, north, east] = bbox;
   return `
 [out:json][timeout:60];
 (
   way["building"~"^(church|cathedral)$"](${south},${west},${north},${east});
   relation["building"~"^(church|cathedral)$"](${south},${west},${north},${east});
+  node["entrance"="main"](${south},${west},${north},${east});
+  node["entrance"="yes"](${south},${west},${north},${east});
 );
 out body;
 >;
@@ -191,8 +193,35 @@ async function fetchOverpass(bboxSWNE) {
     body: new URLSearchParams({ data: q }).toString()
   });
   if (!res.ok) throw new Error(`Overpass error: ${res.status}`);
-  const json = await res.json();
-  return osmtogeojson(json); // 下で定義
+  const osm = await res.json();
+  return splitOsmToGeojson(osm); // ★ここ
+}
+
+  function splitOsmToGeojson(osm) {
+  const elements = Array.isArray(osm.elements) ? osm.elements : [];
+
+  // entrance nodes
+  const entrances = [];
+  for (const el of elements) {
+    if (el.type === "node" && el.tags && (el.tags.entrance === "main" || el.tags.entrance === "yes")) {
+      entrances.push({
+        type: "Feature",
+        properties: {
+          entrance: el.tags.entrance, // "main" or "yes"
+          "@id": `node/${el.id}`
+        },
+        geometry: { type: "Point", coordinates: [el.lon, el.lat] }
+      });
+    }
+  }
+
+  // buildings polygons (←あなたの既存osmtogeojsonを流用)
+  const buildings = osmtogeojson(osm);
+
+  return {
+    buildingsFC: buildings,
+    entrancesFC: { type: "FeatureCollection", features: entrances }
+  };
 }
 
 // ========= OSM JSON → GeoJSON（修正版） =========
@@ -274,11 +303,13 @@ function osmtogeojson(osm) {
 
 
 /* ========= 計算・描画 ========= */
-function computeOrientationFeatures(fc) {
+function computeOrientationFeatures(buildingsFC, entrancesFC) {
   const mode = modeSelect?.value || "altar";
   const rows = [];
 
-  fc.features.forEach(f => {
+  const entrancePts = entrancesFC?.features || []; // Point features (entrance nodes)
+
+  buildingsFC.features.forEach(f => {
     const props = f.properties || {};
     const name = guessName(props);
 
@@ -286,20 +317,35 @@ function computeOrientationFeatures(fc) {
     const center = safeCentroid(f); // [lon,lat]
     const lonC = center[0], latC = center[1];
 
-    // PCA
+    // PCA（長軸）
     const coords = collectCoords(f.geometry);
     const pcaDeg = (coords.length >= 4) ? pcaOrientationDeg(coords) : 0;
 
-    // 入口（もしあれば）
-    const hasEntrance = Number.isFinite(+props.entrance_lon) && Number.isFinite(+props.entrance_lat);
-    const entranceDeg = hasEntrance
-      ? bearingDeg(lonC, latC, +props.entrance_lon, +props.entrance_lat)
-      : null;
+    // --- 入口ノードを最近傍で探す（main優先→yes）---
+    const cPt = turf.point([lonC, latC]);
+
+    let best = null; // { elon, elat, typ, distM, pr }
+    for (const ep of entrancePts) {
+      if (ep.geometry?.type !== "Point") continue;
+      const [elon, elat] = ep.geometry.coordinates;
+
+      const typ = ep.properties?.entrance || "yes"; // "main" or "yes"
+      const pr = (typ === "main") ? 0 : 1;          // 優先: main(0) -> yes(1)
+
+      const distM = turf.distance(cPt, turf.point([elon, elat]), { units: "meters" });
+
+      const cand = { elon, elat, typ, distM, pr };
+      if (!best) best = cand;
+      else if (cand.pr < best.pr || (cand.pr === best.pr && cand.distM < best.distM)) best = cand;
+    }
+
+    // 入口方位（中心→入口）
+    const entranceDeg = best ? bearingDeg(lonC, latC, best.elon, best.elat) : null;
 
     // 祭壇（入口の反対）
     const altarDeg = (entranceDeg != null) ? (entranceDeg + 180) % 360 : null;
 
-    // 採用する方位
+    // 採用する方位（入口/祭壇/長軸）
     let theta;
     if (mode === "entrance" && entranceDeg != null) theta = entranceDeg;
     else if (mode === "altar" && altarDeg != null) theta = altarDeg;
@@ -312,11 +358,20 @@ function computeOrientationFeatures(fc) {
       name,
       lat: latC,
       lon: lonC,
+
       orientation_deg: theta,
       deviation_deg: dev,
+
       entrance_deg: entranceDeg,
       altar_deg: altarDeg,
       pca_deg: pcaDeg,
+
+      // ★入口点表示用（renderAllで使える）
+      entrance_lat: best ? best.elat : null,
+      entrance_lon: best ? best.elon : null,
+      entrance_type: best ? best.typ : null,
+      entrance_distance_m: best ? best.distM : null,
+
       geometry: f.geometry,
       raw: f
     });
@@ -470,18 +525,17 @@ function renderAll(rows) {
 
     pt.on("click", () => selectFeatureById(r.id));
 
-   const props = r.raw?.properties || {};
-if (Number.isFinite(+props.entrance_lat) && Number.isFinite(+props.entrance_lon)) {
-  const elat = +props.entrance_lat;
-  const elon = +props.entrance_lon;
-
-  const ept = L.circleMarker([elat, elon], {
+  if (Number.isFinite(r.entrance_lat) && Number.isFinite(r.entrance_lon)) {
+  const ept = L.circleMarker([r.entrance_lat, r.entrance_lon], {
     radius: 4,
-    color: "#00a000",
-    fillColor: "#00ff00",
+    color: "#000",
+    fillColor: "#000",
     fillOpacity: 0.9
   })
-  .bindTooltip(`<b>Entrance</b><br/>${r.name}`, { sticky:true })
+  .bindTooltip(
+    `<b>Entrance (${r.entrance_type})</b><br/>${r.name}<br/>d=${r.entrance_distance_m.toFixed(1)}m`,
+    { sticky:true, className:"mylabel" }
+  )
   .addTo(entranceLayer);
 
   ept.on("click", () => selectFeatureById(r.id));
@@ -531,10 +585,10 @@ async function searchByCity() {
 async function runOverpassForCurrentView() {
   try {
     const b = map.getBounds();
-    // Overpassのbboxは (south, west, north, east)
     const bbox = [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()];
-    const fc = await fetchOverpass(bbox);
-    const rows = computeOrientationFeatures(fc);
+    const { buildingsFC, entrancesFC } = await fetchOverpass(bbox);
+
+    const rows = computeOrientationFeatures(buildingsFC, entrancesFC); // ★
     renderAll(rows);
     setStatus(`取得: ${rows.length} 件`, "success");
   } catch (e) {
