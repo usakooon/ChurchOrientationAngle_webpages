@@ -16,7 +16,12 @@ const tableBody = document.getElementById("table-body");
 const btnExportCsv = document.getElementById("btn-export-csv");
 const btnExportGeojson = document.getElementById("btn-export-geojson");
 const fileImport = document.getElementById("file-import");
-const modeSelect = document.getElementById("mode");
+const roseEntranceCanvas = document.getElementById("rose-entrance");
+const roseEntranceCaption = document.getElementById("rose-entrance-caption");
+
+const roseAltarCanvas = document.getElementById("rose-altar");
+const roseAltarCaption = document.getElementById("rose-altar-caption");
+
 
 /* ========= Leaflet ========= */
 const map = L.map(mapDiv, { zoomControl: true }).setView([45.4642, 9.19], 13);
@@ -321,23 +326,49 @@ function computeOrientationFeatures(buildingsFC, entrancesFC) {
     const coords = collectCoords(f.geometry);
     const pcaDeg = (coords.length >= 4) ? pcaOrientationDeg(coords) : 0;
 
-    // --- 入口ノードを最近傍で探す（main優先→yes）---
+    // --- 入口ノードを探索（建物内 or 建物近傍のみ）---
     const cPt = turf.point([lonC, latC]);
-
-    let best = null; // { elon, elat, typ, distM, pr }
+    
+    let best = null; 
+    // best = { elon, elat, typ, distCenterM, distFromBldgM, pr }
+    
+    const MAX_DIST_FROM_BUILDING = 15; // m（まずは15m推奨）
+    
     for (const ep of entrancePts) {
       if (ep.geometry?.type !== "Point") continue;
       const [elon, elat] = ep.geometry.coordinates;
-
-      const typ = ep.properties?.entrance || "yes"; // "main" or "yes"
-      const pr = (typ === "main") ? 0 : 1;          // 優先: main(0) -> yes(1)
-
-      const distM = turf.distance(cPt, turf.point([elon, elat]), { units: "meters" });
-
-      const cand = { elon, elat, typ, distM, pr };
-      if (!best) best = cand;
-      else if (cand.pr < best.pr || (cand.pr === best.pr && cand.distM < best.distM)) best = cand;
-    }
+    
+      const p = turf.point([elon, elat]);
+    
+      // 優先度（main → yes）
+      const typ = ep.properties?.entrance || "yes";
+      const pr = (typ === "main") ? 0 : 1;
+    
+      // ① 建物内か？
+      const inside = turf.booleanPointInPolygon(p, f);
+    
+      // ② 建物からの距離（外の場合のみ）
+      let distFromBldgM = 0;
+      if (!inside) {
+        // 建物から離れすぎている入口は除外
+        distFromBldgM = turf.pointToPolygonDistance(p, f, { units: "meters" });
+        if (distFromBldgM > MAX_DIST_FROM_BUILDING) continue;
+      }
+    
+      // ③ 中心からの距離（比較用）
+      const distCenterM = turf.distance(cPt, p, { units: "meters" });
+    
+      const cand = { elon, elat, typ, pr, distCenterM, distFromBldgM };
+    
+      if (!best) {
+        best = cand;
+      } else if (
+        cand.pr < best.pr ||                               // main 優先
+        (cand.pr === best.pr && cand.distCenterM < best.distCenterM)
+      ) {
+        best = cand;
+      }
+    }    
 
     // 入口方位（中心→入口）
     const entranceDeg = best ? bearingDeg(lonC, latC, best.elon, best.elat) : null;
@@ -404,20 +435,15 @@ function selectFeatureById(id) {
   if (hit?.poly) map.fitBounds(hit.poly.getBounds(), { padding: [30, 30] });
 }
 
-  
-const roseCanvas = document.getElementById("rose");
-const roseCaption = document.getElementById("rose-caption");
-
-function drawRose(rows, binDeg = 10) {
-  if (!roseCanvas) return;
-  const ctx = roseCanvas.getContext("2d");
-  const W = roseCanvas.width, H = roseCanvas.height;
+function drawRoseOn(canvas, captionEl, anglesDeg, binDeg = 10, label = "") {
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
   ctx.clearRect(0,0,W,H);
 
-  // データ（表示している方位角を使う）
-  const angles = rows.map(r => r.orientation_deg).filter(v => Number.isFinite(v));
+  const angles = anglesDeg.filter(v => Number.isFinite(v));
   if (!angles.length) {
-    if (roseCaption) roseCaption.textContent = "データなし";
+    if (captionEl) captionEl.textContent = `${label} データなし`;
     return;
   }
 
@@ -432,7 +458,6 @@ function drawRose(rows, binDeg = 10) {
   const cx = W/2, cy = H/2;
   const R = Math.min(W,H) * 0.42;
 
-  // 補助円
   ctx.strokeStyle = "#ccc";
   ctx.lineWidth = 1;
   for (let k=1;k<=3;k++){
@@ -441,7 +466,6 @@ function drawRose(rows, binDeg = 10) {
     ctx.stroke();
   }
 
-  // N/E/S/W ラベル
   ctx.fillStyle = "#333";
   ctx.font = "14px system-ui";
   ctx.fillText("N", cx-5, cy-R-10);
@@ -449,12 +473,9 @@ function drawRose(rows, binDeg = 10) {
   ctx.fillText("S", cx-5, cy+R+18);
   ctx.fillText("W", cx-R-18, cy+5);
 
-  // 棒（扇形）
   for (let i=0;i<bins;i++){
     const a0 = (i*binDeg) * Math.PI/180;
     const a1 = ((i+1)*binDeg) * Math.PI/180;
-
-    // 角度は「北=0」をCanvasに合わせる：Canvasは右(E)=0なので -90°回す
     const rot = -Math.PI/2;
     const start = a0 + rot;
     const end = a1 + rot;
@@ -465,16 +486,13 @@ function drawRose(rows, binDeg = 10) {
     ctx.moveTo(cx,cy);
     ctx.arc(cx,cy,len,start,end);
     ctx.closePath();
-    ctx.fillStyle = "rgba(200,50,50,0.55)";
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.fill();
-    ctx.strokeStyle = "rgba(120,30,30,0.6)";
+    ctx.strokeStyle = "rgba(0,0,0,0.35)";
     ctx.stroke();
   }
 
-  if (roseCaption) {
-    const mode = modeSelect?.value || "";
-    roseCaption.textContent = `bin=${binDeg}° / n=${angles.length} / mode=${mode}`;
-  }
+  if (captionEl) captionEl.textContent = `${label} bin=${binDeg}° / n=${angles.length}`;
 }
 
   
@@ -501,10 +519,19 @@ function renderAll(rows) {
 
     poly.on("click", () => selectFeatureById(r.id));
 
-    // --- Arrow ---
-    const line = makeArrowLine([r.lon, r.lat], r.orientation_deg, 70);
-    const arrow = L.polyline(line, { color:"#d22", weight:2 }).addTo(arrowLayer);
-    arrow.on("click", () => selectFeatureById(r.id));
+   // --- Arrows (Entrance red, Altar blue) ---
+    if (Number.isFinite(r.entrance_deg)) {
+      const lineE = makeArrowLine([r.lon, r.lat], r.entrance_deg, 70);
+      const arrowE = L.polyline(lineE, { color:"#d22", weight:2 }).addTo(arrowLayer);
+      arrowE.on("click", () => selectFeatureById(r.id));
+    }
+    
+    if (Number.isFinite(r.altar_deg)) {
+      const lineA = makeArrowLine([r.lon, r.lat], r.altar_deg, 70);
+      const arrowA = L.polyline(lineA, { color:"#2266ff", weight:2 }).addTo(arrowLayer);
+      arrowA.on("click", () => selectFeatureById(r.id));
+    }
+
 
     // --- Point + hover tooltip ---
     const label = [
@@ -559,11 +586,23 @@ function renderAll(rows) {
 
   tableBody.appendChild(frag);
   lastFeatures = rows;
-  drawRose(rows, 10);
+  
+  drawRoseOn(
+  roseEntranceCanvas,
+  roseEntranceCaption,
+  rows.map(r => r.entrance_deg),
+  10,
+  "Entrance"
+);
 
+drawRoseOn(
+  roseAltarCanvas,
+  roseAltarCaption,
+  rows.map(r => r.altar_deg),
+  10,
+  "Altar"
+);
 }
-
-
 
 function setStatus(msg, cls="") { statusEl.textContent = msg; statusEl.className = `status ${cls}`; }
 
