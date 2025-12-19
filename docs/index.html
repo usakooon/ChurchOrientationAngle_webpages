@@ -24,12 +24,6 @@
         <span id="status" class="status">準備OK</span>
       </div>
 
-      <select id="mode">
-        <option value="entrance">入口方向（重心→入口）</option>
-        <option value="altar" selected>祭壇方向（入口の反対）</option>
-        <option value="pca">PCA（長軸）</option>
-      </select>
-
       <div class="toolbar">
         <button id="btn-export-csv">CSVエクスポート</button>
         <button id="btn-export-geojson">GeoJSONエクスポート</button>
@@ -60,8 +54,13 @@
         </table>
       </div>
        <h2>ローズダイアグラム</h2>
-            <canvas id="rose" width="360" height="360"></canvas>
-            <div id="rose-caption" class="hint"></div>
+          <h3>Entrance（赤）</h3>
+          <canvas id="rose-entrance" width="360" height="360"></canvas>
+          <div id="rose-entrance-caption" class="hint"></div>
+          
+          <h3>Altar（青）</h3>
+          <canvas id="rose-altar" width="360" height="360"></canvas>
+          <div id="rose-altar-caption" class="hint"></div>
     </div>
   </div>
 
