@@ -231,7 +231,7 @@ async function fetchOverpass(bboxSWNE) {
 
 // ========= OSM JSON → GeoJSON（修正版） =========
 // Overpassの出力（node / way / relation）を安全にGeoJSON化します
-function osmtogeojson(osm) {
+function osmtogeojsonLite(osm) {
   const elements = Array.isArray(osm.elements) ? osm.elements : [];
 
   // --- node一覧をマップに登録 ---
