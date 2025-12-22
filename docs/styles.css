@@ -32,11 +32,5 @@ tbody tr:hover { background: #f9f9f9; }
   color: #111;
   padding: 2px 4px;
 }
-modeSelect.addEventListener("change", () => {
-  if (!lastFeatures.length) return;
-  // lastFeaturesは rows なので、raw から再計算したい場合は保持が必要。
-  // 一番簡単なのは「直近の検索をもう一回」：
-  runOverpassForCurrentView();
-});
 
 #rose { width: 100%; max-width: 380px; border: 1px solid #eee; border-radius: 8px; }
