@@ -310,77 +310,49 @@ function osmtogeojson(osm) {
 /* ========= 計算・描画 ========= */
 function computeOrientationFeatures(buildingsFC, entrancesFC) {
   const rows = [];
-
-  const entrancePts = entrancesFC?.features || []; // Point features (entrance nodes)
+  const entrancePts = entrancesFC?.features || [];
 
   buildingsFC.features.forEach(f => {
     const props = f.properties || {};
     const name = guessName(props);
 
     // 中心
-    const center = safeCentroid(f); // [lon,lat]
+    const center = safeCentroid(f);
     const lonC = center[0], latC = center[1];
 
     // PCA（長軸）
     const coords = collectCoords(f.geometry);
     const pcaDeg = (coords.length >= 4) ? pcaOrientationDeg(coords) : 0;
 
-    // --- 入口ノードを探索（建物内 or 建物近傍のみ）---
+    // ---- 入口ノード探索（安定版：建物内のみ）----
     const cPt = turf.point([lonC, latC]);
-    
-    let best = null; 
-    // best = { elon, elat, typ, distCenterM, distFromBldgM, pr }
-    
-    const MAX_DIST_FROM_BUILDING = 15; // m（まずは15m推奨）
-    
+    let best = null; // { elon, elat, typ, pr, distCenterM }
+
     for (const ep of entrancePts) {
       if (ep.geometry?.type !== "Point") continue;
       const [elon, elat] = ep.geometry.coordinates;
-    
       const p = turf.point([elon, elat]);
-    
-      // 優先度（main → yes）
+
+      // 建物内のみ（まずは確実に動く版）
+      if (!turf.booleanPointInPolygon(p, f)) continue;
+
       const typ = ep.properties?.entrance || "yes";
       const pr = (typ === "main") ? 0 : 1;
-    
-      // ① 建物内か？
-      const inside = turf.booleanPointInPolygon(p, f);
-    
-      // ② 建物からの距離（外の場合のみ）
-      let distFromBldgM = 0;
-      if (!inside) {
-        // 建物から離れすぎている入口は除外
-        distFromBldgM = turf.pointToPolygonDistance(p, f, { units: "meters" });
-        if (distFromBldgM > MAX_DIST_FROM_BUILDING) continue;
-      }
-    
-      // ③ 中心からの距離（比較用）
       const distCenterM = turf.distance(cPt, p, { units: "meters" });
-    
-      const cand = { elon, elat, typ, pr, distCenterM, distFromBldgM };
-    
-      if (!best) {
-        best = cand;
-      } else if (
-        cand.pr < best.pr ||                               // main 優先
-        (cand.pr === best.pr && cand.distCenterM < best.distCenterM)
-      ) {
-        best = cand;
-      }
-    }    
 
-    // 入口方位（中心→入口）
+      const cand = { elon, elat, typ, pr, distCenterM };
+      if (!best) best = cand;
+      else if (cand.pr < best.pr || (cand.pr === best.pr && cand.distCenterM < best.distCenterM)) best = cand;
+    }
+
+    // 入口（中心→入口）
     const entranceDeg = best ? bearingDeg(lonC, latC, best.elon, best.elat) : null;
 
     // 祭壇（入口の反対）
     const altarDeg = (entranceDeg != null) ? (entranceDeg + 180) % 360 : null;
 
-    // 採用する方位（入口/祭壇/長軸）
-    let theta;
-    if (mode === "entrance" && entranceDeg != null) theta = entranceDeg;
-    else if (mode === "altar" && altarDeg != null) theta = altarDeg;
-    else theta = pcaDeg;
-
+    // 表に出す代表方位：祭壇が取れれば祭壇、無ければPCA
+    const theta = (altarDeg != null) ? altarDeg : pcaDeg;
     const dev = eastWestDeviationDeg(theta);
 
     rows.push({
@@ -396,11 +368,10 @@ function computeOrientationFeatures(buildingsFC, entrancesFC) {
       altar_deg: altarDeg,
       pca_deg: pcaDeg,
 
-      // ★入口点表示用（renderAllで使える）
       entrance_lat: best ? best.elat : null,
       entrance_lon: best ? best.elon : null,
       entrance_type: best ? best.typ : null,
-      entrance_distance_m: best ? best.distM : null,
+      entrance_distance_m: best ? best.distCenterM : null,
 
       geometry: f.geometry,
       raw: f
@@ -558,8 +529,11 @@ function renderAll(rows) {
     fillColor: "#000",
     fillOpacity: 0.9
   })
+
+  const distTxt = Number.isFinite(r.entrance_distance_m) ? r.entrance_distance_m.toFixed(1) : "NA";
+    
   .bindTooltip(
-    `<b>Entrance (${r.entrance_type})</b><br/>${r.name}<br/>d=${r.entrance_distance_m.toFixed(1)}m`,
+   `<b>Entrance (${r.entrance_type})</b><br/>${r.name}<br/>d=${distTxt}m`,
     { sticky:true, className:"mylabel" }
   )
   .addTo(entranceLayer);
