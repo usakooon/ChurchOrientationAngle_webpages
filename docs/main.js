@@ -580,7 +580,7 @@ function renderAll(rows) {
     frag.appendChild(tr);
 
     // --- 参照を保存（選択時に使う）---
-    layerIndex.set(r.id, { id: r.id, poly, pt, arrow, rowEl: tr });
+   layerIndex.set(r.id, { id: r.id, poly, pt, rowEl: tr });
   });
 
   tableBody.appendChild(frag);
