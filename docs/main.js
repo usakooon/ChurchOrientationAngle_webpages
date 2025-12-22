@@ -220,8 +220,15 @@ async function fetchOverpass(bboxSWNE) {
     }
   }
 
-  // buildings polygons (←あなたの既存osmtogeojsonを流用)
-  const buildings = osmtogeojson(osm);
+ const all = osmtogeojson(osm);
+
+  const buildings = {
+    type: "FeatureCollection",
+    features: all.features.filter(f =>
+      f.geometry &&
+      (f.geometry.type === "Polygon" || f.geometry.type === "MultiPolygon")
+    )
+  };
 
   return {
     buildingsFC: buildings,
