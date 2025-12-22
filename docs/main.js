@@ -522,19 +522,20 @@ function renderAll(rows) {
 
     pt.on("click", () => selectFeatureById(r.id));
 
-  if (Number.isFinite(r.entrance_lat) && Number.isFinite(r.entrance_lon)) {
+ if (Number.isFinite(r.entrance_lat) && Number.isFinite(r.entrance_lon)) {
+  const distTxt = Number.isFinite(r.entrance_distance_m)
+    ? r.entrance_distance_m.toFixed(1)
+    : "NA";
+
   const ept = L.circleMarker([r.entrance_lat, r.entrance_lon], {
     radius: 4,
     color: "#000",
     fillColor: "#000",
     fillOpacity: 0.9
   })
-
-  const distTxt = Number.isFinite(r.entrance_distance_m) ? r.entrance_distance_m.toFixed(1) : "NA";
-    
   .bindTooltip(
-   `<b>Entrance (${r.entrance_type})</b><br/>${r.name}<br/>d=${distTxt}m`,
-    { sticky:true, className:"mylabel" }
+    `<b>Entrance (${r.entrance_type})</b><br/>${r.name}<br/>d=${distTxt}m`,
+    { sticky: true, className: "mylabel" }
   )
   .addTo(entranceLayer);
 
