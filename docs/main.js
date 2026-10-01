@@ -13,6 +13,7 @@ const cityBtn = document.getElementById("btn-city");
 const bboxBtn = document.getElementById("btn-bbox");
 const statusEl = document.getElementById("status");
 const tableBody = document.getElementById("table-body");
+const resultCount = document.getElementById("result-count");
 const btnExportCsv = document.getElementById("btn-export-csv");
 const btnExportGeojson = document.getElementById("btn-export-geojson");
 const fileImport = document.getElementById("file-import");
@@ -43,6 +44,12 @@ let layerIndex = new Map(); // id -> { poly, pt, arrow, rowEl }
 // 文字列名をいい感じに（OSMタグ name / church, etc.）
 function guessName(props = {}) {
   return props.name || props["name:en"] || props["name:it"] || props["name:ja"] || props["addr:housename"] || "(no name)";
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"]/g, char => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"
+  })[char]);
 }
 
 // MultiPolygon / Polygon から全頂点を抽出（PCA用）
@@ -463,9 +470,9 @@ function drawRoseOn(canvas, captionEl, anglesDeg, binDeg = 10, label = "") {
     ctx.moveTo(cx,cy);
     ctx.arc(cx,cy,len,start,end);
     ctx.closePath();
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillStyle = label === "Entrance" ? "rgba(221,34,34,0.55)" : "rgba(34,102,255,0.55)";
     ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,0.35)";
+    ctx.strokeStyle = label === "Entrance" ? "rgba(170,20,20,0.7)" : "rgba(20,70,190,0.7)";
     ctx.stroke();
   }
 
@@ -480,6 +487,7 @@ function renderAll(rows) {
   pointLayer.clearLayers();
   entranceLayer.clearLayers();
   tableBody.innerHTML = "";
+  if (resultCount) resultCount.textContent = rows.length;
   layerIndex = new Map();
 
   const frag = document.createDocumentFragment();
@@ -512,7 +520,7 @@ function renderAll(rows) {
 
     // --- Point + hover tooltip ---
     const label = [
-      `<b>${r.name}</b>`,
+      `<b>${escapeHtml(r.name)}</b>`,
       `θ: ${r.orientation_deg.toFixed(1)}°`,
       `dev: ${r.deviation_deg.toFixed(1)}°`
     ].join("<br/>");
@@ -541,7 +549,7 @@ function renderAll(rows) {
     fillOpacity: 0.9
   })
   .bindTooltip(
-    `<b>Entrance (${r.entrance_type})</b><br/>${r.name}<br/>d=${distTxt}m`,
+      `<b>Entrance (${escapeHtml(r.entrance_type)})</b><br/>${escapeHtml(r.name)}<br/>d=${distTxt}m`,
     { sticky: true, className: "mylabel" }
   )
   .addTo(entranceLayer);
@@ -552,11 +560,9 @@ function renderAll(rows) {
     // --- Table row ---
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${r.name}</td>
-      <td>${r.lat.toFixed(6)}</td>
-      <td>${r.lon.toFixed(6)}</td>
-      <td>${r.orientation_deg.toFixed(1)}</td>
-      <td>${r.deviation_deg.toFixed(1)}</td>
+      <td>${escapeHtml(r.name)}</td>
+      <td>${r.orientation_deg.toFixed(1)}°</td>
+      <td>${r.deviation_deg.toFixed(1)}°</td>
     `;
     tr.addEventListener("click", () => selectFeatureById(r.id));
     frag.appendChild(tr);
