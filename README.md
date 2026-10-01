@@ -23,8 +23,9 @@ GitHub Pages上で直接動作し、都市を検索して地図上に教会の�
   - Calculates `orientation_deg` (0° = north) and deviation from east–west axis (`deviation_deg`).  
 
 - 🧮 **Map Visualization / 地図上での可視化**  
-  - Displays each church footprint as a polygon with a **red directional arrow** showing its dominant axis.  
-  - 表の中で、名称・緯度経度・方位角・東西偏差を一覧で表示。  
+  - Displays each church footprint with directional lines: **entrance in red** and **estimated altar direction in blue** when entrance data is available.
+  - 名称・方位角・東西偏差を一覧表示し、地図上の建物と連動します。
+  - 入口・祭壇方向の分布を**ローズダイアグラム**で可視化します。
 
 - 📂 **Data Import & Export / データの入出力**  
   - Export analyzed data as **CSV** or **GeoJSON**.  
@@ -78,13 +79,20 @@ This project aims to explore **how urban form affects church orientation**,
 👉 **Live Web App:**  
 [https://usakooon.github.io/ChurchOrientationAngle_webpages/](https://usakooon.github.io/ChurchOrientationAngle_webpages/)
 
+### How to use / 使い方
+
+1. 都市名（例: `Milano`, `Rome`, `Tokyo`）を入力して「都市を検索」
+2. または地図を移動し、「表示範囲で検索」
+3. 建物または一覧行を選択して解析結果を確認
+4. 必要に応じてCSV・GeoJSONで結果を保存
+
 ---
 
 ## 💡 Future Work / 今後の展望  
 
-- 🚪 Estimate **entrance–altar direction / 入口と祭壇方向の自動推定**（道路近接方向などから）  
+- 🚪 Improve **entrance–altar estimation / 入口・祭壇方向の推定精度**（道路近接方向などを追加）
 - 🧱 Improve polygon accuracy for complex churches（ポリゴンの精度補正）  
-- 📈 Visualize **orientation distributions** per city using rose diagrams（都市ごとの方位分布図）  
+- 📈 Compare **orientation distributions between cities** using the implemented rose diagrams（都市間比較）
  
 ---
 
